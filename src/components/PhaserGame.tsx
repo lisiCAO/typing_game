@@ -3,24 +3,25 @@
 import React, { useRef, useEffect } from 'react';
 import * as Phaser from 'phaser';
 
-/* ------------------------------ Balloon Class ------------------------------
-   Represents an individual balloon with its own container, letter, and upward motion.
------------------------------------------------------------------------------- */
 class Balloon {
   scene: Phaser.Scene;
   container: Phaser.GameObjects.Container;
-  circle: Phaser.GameObjects.Arc;
-  text: Phaser.GameObjects.Text;
+  sprite: Phaser.GameObjects.Image;
   letter: string;
   speed: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, letter: string) {
     this.scene = scene;
     this.container = scene.add.container(x, y);
-    this.circle = scene.add.circle(0, 0, 20, 0xff0000);
-    this.text = scene.add.text(0, 0, letter, { fontSize: '20px', color: '#ffffff' });
-    this.text.setOrigin(0.5);
-    this.container.add([this.circle, this.text]);
+    this.sprite = scene.add.image(0, 0, 'childBalloon');
+    this.sprite.setScale(0.2);
+    const letterText = scene.add.text(0, 0, letter, {
+      fontSize: '20px',
+      color: '#ffffff',
+    });
+    letterText.setOrigin(0.5);
+    letterText.setPosition(-3, -30);
+    this.container.add([this.sprite, letterText]);
     this.letter = letter;
     this.speed = 1;
   }
@@ -42,9 +43,6 @@ class Balloon {
   }
 }
 
-/* ------------------------- BalloonManager Class -----------------------------
-   Handles the creation, update, and removal of all balloons.
------------------------------------------------------------------------------- */
 class BalloonManager {
   scene: Phaser.Scene;
   balloons: Balloon[];
@@ -64,7 +62,7 @@ class BalloonManager {
       this.lastSpawnTime = time;
     }
     this.balloons.forEach(balloon => balloon.update(delta));
-    this.balloons = this.balloons.filter(balloon => balloon.y > -50);
+    this.balloons = this.balloons.filter(balloon => balloon.y > -100);
   }
 
   spawnBalloon() {
@@ -88,9 +86,6 @@ class BalloonManager {
   }
 }
 
-/* ------------------------------ Bird Class ---------------------------------
-   Represents a bird animation that moves from a starting point to a target.
------------------------------------------------------------------------------- */
 class Bird {
   scene: Phaser.Scene;
   sprite: Phaser.GameObjects.Arc;
@@ -101,6 +96,14 @@ class Bird {
   constructor(scene: Phaser.Scene, startX: number, startY: number, targetX: number, targetY: number) {
     this.scene = scene;
     this.sprite = scene.add.circle(startX, startY, 5, 0x0000ff);
+    // Stabbing animation
+    scene.tweens.add({
+      targets: this.sprite,
+      angle: 20,
+      duration: 200,
+      yoyo: true,
+      ease: 'Sine.easeInOut'
+    });
     this.targetX = targetX;
     this.targetY = targetY;
     this.speed = 4;
@@ -127,9 +130,6 @@ class Bird {
   }
 }
 
-/* --------------------------- BirdManager Class ------------------------------
-   Manages all bird animations independently.
------------------------------------------------------------------------------- */
 class BirdManager {
   scene: Phaser.Scene;
   birds: Bird[];
@@ -149,9 +149,6 @@ class BirdManager {
   }
 }
 
-/* --------------------------- Explosion Class -------------------------------
-   Creates an explosion effect using a tween animation.
------------------------------------------------------------------------------- */
 class Explosion {
   scene: Phaser.Scene;
   circle: Phaser.GameObjects.Arc;
@@ -164,16 +161,11 @@ class Explosion {
       radius: 30,
       alpha: { from: 1, to: 0 },
       duration: 300,
-      onComplete: () => {
-        this.circle.destroy();
-      }
+      onComplete: () => this.circle.destroy()
     });
   }
 }
 
-/* ---------------------------- UIManager Class ------------------------------
-   Manages UI components such as score and timer displays.
------------------------------------------------------------------------------- */
 class UIManager {
   scene: Phaser.Scene;
   score: number;
@@ -186,23 +178,20 @@ class UIManager {
     this.score = 0;
     this.timer = initialTimer;
     this.scoreText = scene.add.text(10, 10, 'Score: 0', { fontSize: '20px', color: '#ffffff' });
-    this.timerText = scene.add.text(650, 10, 'Time: ' + initialTimer, { fontSize: '20px', color: '#ffffff' });
+    this.timerText = scene.add.text(650, 10, `Time: ${initialTimer}`, { fontSize: '20px', color: '#ffffff' });
   }
 
   updateTimer(time: number) {
     this.timer = time;
-    this.timerText.setText('Time: ' + time);
+    this.timerText.setText(`Time: ${time}`);
   }
 
   updateScore(score: number) {
     this.score = score;
-    this.scoreText.setText('Score: ' + score);
+    this.scoreText.setText(`Score: ${score}`);
   }
 }
 
-/* ------------------------- DifficultyManager Class -------------------------
-   Adjusts the game's difficulty over time by modifying balloon speed and spawn rate.
------------------------------------------------------------------------------- */
 class DifficultyManager {
   scene: Phaser.Scene;
   balloonManager: BalloonManager;
@@ -218,17 +207,12 @@ class DifficultyManager {
     this.difficultyTimer += delta;
     if (this.difficultyTimer > 10000) {
       this.difficultyTimer = 0;
-      this.balloonManager.balloons.forEach(balloon => {
-        balloon.speed += 0.2;
-      });
+      this.balloonManager.balloons.forEach(balloon => balloon.speed += 0.2);
       this.balloonManager.spawnInterval = Math.max(500, this.balloonManager.spawnInterval - 100);
     }
   }
 }
 
-/* --------------------------- InputHandler Class ----------------------------
-   Processes keyboard input and triggers the corresponding game actions.
------------------------------------------------------------------------------- */
 class InputHandler {
   scene: Phaser.Scene;
   balloonManager: BalloonManager;
@@ -240,42 +224,31 @@ class InputHandler {
     this.balloonManager = balloonManager;
     this.birdManager = birdManager;
     this.uiManager = uiManager;
-    // Use non-null assertion if necessary:
     scene.input.keyboard!.on('keydown', this.handleKey);
   }
 
   handleKey = (event: KeyboardEvent) => {
-    // Debug: log the current context to ensure it's correct
-    console.log("InputHandler context:", this);
-    
     const keyPressed = event.key.toUpperCase();
     const matchingBalloons = this.balloonManager.getMatchingBalloons(keyPressed);
     if (matchingBalloons.length === 0) return;
-    
-    let targetBalloon = matchingBalloons[0];
-    matchingBalloons.forEach(balloon => {
-      if (balloon.y > targetBalloon.y) {
-        targetBalloon = balloon;
-      }
-    });
-    
+    const validBalloons = matchingBalloons.filter(balloon => balloon.y >= -100);
+    if (validBalloons.length === 0) return;
     this.scene.sound.play('pop');
-    this.birdManager.spawnBird(
-      targetBalloon.x - 20,
-      targetBalloon.y + 20,
-      targetBalloon.x,
-      targetBalloon.y
-    );
-    new Explosion(this.scene, targetBalloon.x, targetBalloon.y);
-    this.balloonManager.removeBalloon(targetBalloon);
-    // Emit a custom event if needed:
-    this.scene.events.emit('balloonPopped', 1);
+    validBalloons.forEach(balloon => {
+      const explosionOffsetY = -20;
+      this.birdManager.spawnBird(
+        balloon.x - 20,
+        balloon.y + 20,
+        balloon.x,
+        balloon.y + explosionOffsetY
+      );
+      new Explosion(this.scene, balloon.x, balloon.y + explosionOffsetY);
+      this.balloonManager.removeBalloon(balloon);
+      this.scene.events.emit('balloonPopped', 1);
+    });
   }
 }
 
-/* ------------------------ TypingGameScene Class ----------------------------
-   Main Phaser scene that integrates all modules.
------------------------------------------------------------------------------- */
 class TypingGameScene extends Phaser.Scene {
   score: number = 0;
   gameTimer: number = 60;
@@ -289,7 +262,8 @@ class TypingGameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.audio('pop', '/pop.m4a');
+    this.load.image('childBalloon', '/child_balloon.png');
+    this.load.audio('pop', '/pop_arya.m4a');
   }
 
   create() {
@@ -300,11 +274,7 @@ class TypingGameScene extends Phaser.Scene {
     this.uiManager = new UIManager(this, this.gameTimer);
     this.difficultyManager = new DifficultyManager(this, this.balloonManager);
     new InputHandler(this, this.balloonManager, this.birdManager, this.uiManager);
-
-    // Listen for custom events to update score
     this.events.on('balloonPopped', this.updateScore, this);
-
-    // Timer event: update every second.
     this.time.addEvent({
       delay: 1000,
       callback: () => {
@@ -331,9 +301,6 @@ class TypingGameScene extends Phaser.Scene {
   }
 }
 
-/* --------------------------- React Component -------------------------------
-   Mounts the Phaser game into the Next.js page.
------------------------------------------------------------------------------- */
 const PhaserGame: React.FC = () => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
 
@@ -349,9 +316,7 @@ const PhaserGame: React.FC = () => {
         arcade: { debug: false },
       }
     };
-
     const game = new Phaser.Game(config);
-
     return () => {
       game.destroy(true);
     };
