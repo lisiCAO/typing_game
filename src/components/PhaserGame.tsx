@@ -123,14 +123,15 @@ class Bird {
     const dy = this.targetY - this.sprite.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance < 5) {
+      void delta; // Ensure ESLint sees delta as used.
       if (this.onHit) this.onHit();
       this.destroy();
       return true;
     } else {
       const vx = (dx / distance) * this.speed;
       const vy = (dy / distance) * this.speed;
-      this.sprite.x += vx;
-      this.sprite.y += vy;
+      this.sprite.x += vx * (delta / 16.67);
+      this.sprite.y += vy * (delta / 16.67);
       return false;
     }
   }
