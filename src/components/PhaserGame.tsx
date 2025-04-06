@@ -9,16 +9,14 @@ class Balloon {
   sprite: Phaser.GameObjects.Image;
   letter: string;
   speed: number;
+  hit: boolean = false; 
 
   constructor(scene: Phaser.Scene, x: number, y: number, letter: string) {
     this.scene = scene;
     this.container = scene.add.container(x, y);
     this.sprite = scene.add.image(0, 0, 'childBalloon');
     this.sprite.setScale(0.2);
-    const letterText = scene.add.text(0, 0, letter, {
-      fontSize: '20px',
-      color: '#ffffff',
-    });
+    const letterText = scene.add.text(0, 0, letter, { fontSize: '20px', color: '#ffffff' });
     letterText.setOrigin(0.5);
     letterText.setPosition(-3, -30);
     this.container.add([this.sprite, letterText]);
@@ -92,8 +90,16 @@ class Bird {
   targetX: number;
   targetY: number;
   speed: number;
+  onHit?: () => void;
 
-  constructor(scene: Phaser.Scene, startX: number, startY: number, targetX: number, targetY: number) {
+  constructor(
+    scene: Phaser.Scene,
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number,
+    onHit?: () => void
+  ) {
     this.scene = scene;
     this.sprite = scene.add.circle(startX, startY, 5, 0x0000ff);
     // Stabbing animation
@@ -107,6 +113,7 @@ class Bird {
     this.targetX = targetX;
     this.targetY = targetY;
     this.speed = 4;
+    this.onHit = onHit;
   }
 
   update(delta: number): boolean {
@@ -114,6 +121,7 @@ class Bird {
     const dy = this.targetY - this.sprite.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance < 5) {
+      if (this.onHit) this.onHit();
       this.destroy();
       return true;
     } else {
@@ -139,8 +147,8 @@ class BirdManager {
     this.birds = [];
   }
 
-  spawnBird(startX: number, startY: number, targetX: number, targetY: number) {
-    const bird = new Bird(this.scene, startX, startY, targetX, targetY);
+  spawnBird(startX: number, startY: number, targetX: number, targetY: number, onHit?: () => void) {
+    const bird = new Bird(this.scene, startX, startY, targetX, targetY, onHit);
     this.birds.push(bird);
   }
 
@@ -227,26 +235,63 @@ class InputHandler {
     scene.input.keyboard!.on('keydown', this.handleKey);
   }
 
+  // Intercept calculation taking into account both horizontal and vertical motion.
   handleKey = (event: KeyboardEvent) => {
     const keyPressed = event.key.toUpperCase();
     const matchingBalloons = this.balloonManager.getMatchingBalloons(keyPressed);
     if (matchingBalloons.length === 0) return;
-    const validBalloons = matchingBalloons.filter(balloon => balloon.y >= -100);
+    const validBalloons = matchingBalloons.filter(balloon => balloon.y >= -100 && !balloon.hit);
     if (validBalloons.length === 0) return;
-    this.scene.sound.play('pop');
+  
     validBalloons.forEach(balloon => {
+      // Mark the balloon as hit so that it isn't processed again
+      balloon.hit = true;
       const explosionOffsetY = -20;
+      const spawnX = -20;
+      const spawnY = this.scene.cameras.main.height + 20;
+      const dx = balloon.x - spawnX;
+      const dy0 = balloon.y - spawnY;
+      const vBalloon = balloon.speed;
+      const vBird = 4;
+      const A = vBalloon * vBalloon - vBird * vBird;
+      const B = -2 * dy0 * vBalloon;
+      const C = dx * dx + dy0 * dy0;
+      let t = 0;
+      if (Math.abs(A) < 0.0001) {
+        t = C / (-B);
+      } else {
+        const discriminant = B * B - 4 * A * C;
+        if (discriminant < 0) {
+          t = 0;
+        } else {
+          const t1 = (-B + Math.sqrt(discriminant)) / (2 * A);
+          const t2 = (-B - Math.sqrt(discriminant)) / (2 * A);
+          t = (t1 > 0 ? t1 : (t2 > 0 ? t2 : 0));
+        }
+      }
+      const predictedY = balloon.y - vBalloon * t;
+      const targetX = balloon.x;
+      const targetY = predictedY + explosionOffsetY;
+  
       this.birdManager.spawnBird(
-        balloon.x - 20,
-        balloon.y + 20,
-        balloon.x,
-        balloon.y + explosionOffsetY
+        spawnX,
+        spawnY,
+        targetX,
+        targetY,
+        () => {
+          // Only process hit if the balloon is still on-screen (visible threshold)
+          if (balloon.y < 0) {
+            // Option A: do not count off-screen hits.
+            return;
+          }
+          new Explosion(this.scene, balloon.x, balloon.y + explosionOffsetY);
+          this.balloonManager.removeBalloon(balloon);
+          this.scene.events.emit('balloonPopped', 1);
+          this.scene.sound.play('pop');
+        }
       );
-      new Explosion(this.scene, balloon.x, balloon.y + explosionOffsetY);
-      this.balloonManager.removeBalloon(balloon);
-      this.scene.events.emit('balloonPopped', 1);
     });
-  }
+  };
 }
 
 class TypingGameScene extends Phaser.Scene {
