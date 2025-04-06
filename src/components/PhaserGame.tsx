@@ -86,7 +86,7 @@ class BalloonManager {
 
 class Bird {
   scene: Phaser.Scene;
-  sprite: Phaser.GameObjects.Arc;
+  sprite: Phaser.GameObjects.Image;
   targetX: number;
   targetY: number;
   speed: number;
@@ -101,8 +101,10 @@ class Bird {
     onHit?: () => void
   ) {
     this.scene = scene;
-    this.sprite = scene.add.circle(startX, startY, 5, 0x0000ff);
-    // Stabbing animation
+    // Use the new bird image asset "chilBird"
+    this.sprite = scene.add.image(startX, startY, 'chilBird');
+    this.sprite.setScale(0.15);
+    // Optional stabbing tween
     scene.tweens.add({
       targets: this.sprite,
       angle: 20,
@@ -235,7 +237,6 @@ class InputHandler {
     scene.input.keyboard!.on('keydown', this.handleKey);
   }
 
-  // Intercept calculation taking into account both horizontal and vertical motion.
   handleKey = (event: KeyboardEvent) => {
     const keyPressed = event.key.toUpperCase();
     const matchingBalloons = this.balloonManager.getMatchingBalloons(keyPressed);
@@ -244,7 +245,6 @@ class InputHandler {
     if (validBalloons.length === 0) return;
   
     validBalloons.forEach(balloon => {
-      // Mark the balloon as hit so that it isn't processed again
       balloon.hit = true;
       const explosionOffsetY = -20;
       const spawnX = -20;
@@ -272,18 +272,13 @@ class InputHandler {
       const predictedY = balloon.y - vBalloon * t;
       const targetX = balloon.x;
       const targetY = predictedY + explosionOffsetY;
-  
       this.birdManager.spawnBird(
         spawnX,
         spawnY,
         targetX,
         targetY,
         () => {
-          // Only process hit if the balloon is still on-screen (visible threshold)
-          if (balloon.y < 0) {
-            // Option A: do not count off-screen hits.
-            return;
-          }
+          if (balloon.y < 0) return;
           new Explosion(this.scene, balloon.x, balloon.y + explosionOffsetY);
           this.balloonManager.removeBalloon(balloon);
           this.scene.events.emit('balloonPopped', 1);
@@ -308,6 +303,7 @@ class TypingGameScene extends Phaser.Scene {
 
   preload() {
     this.load.image('childBalloon', '/child_balloon.png');
+    this.load.image('chilBird', '/chilBird.png');
     this.load.audio('pop', '/pop_arya.m4a');
   }
 
